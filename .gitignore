@@ -53,5 +53,9 @@ opencv_rpi_headers/
 # Models (download separately)
 Data/models/
 
+# Archives
+*.tar.gz
+*.zip
+
 # Environment configuration
 scripts/.env
