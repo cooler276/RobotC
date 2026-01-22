@@ -39,3 +39,19 @@
 
 # debug information files
 *.dwo
+
+# Build directories
+build/
+**/build/
+
+# Libraries (too large for git)
+libs/
+opencv_4.10_headers/
+opencv410_headers/
+opencv_rpi_headers/
+
+# Models (download separately)
+Data/models/
+
+# Environment configuration
+scripts/.env
