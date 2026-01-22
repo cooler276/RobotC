@@ -42,6 +42,7 @@ echo "ファイルを転送中..."
 scp ../Tool/build/camera_calibration_web ${RASPI_USER}@${RASPI_IP}:~/${RASPI_TOOL_DIR}/
 scp ../Tool/build/depth_calibration_web ${RASPI_USER}@${RASPI_IP}:~/${RASPI_TOOL_DIR}/
 scp ../Tool/build/calibrate_depth ${RASPI_USER}@${RASPI_IP}:~/${RASPI_TOOL_DIR}/
+scp ../Tool/build/uart_body_test ${RASPI_USER}@${RASPI_IP}:~/${RASPI_TOOL_DIR}/
 
 # Data ディレクトリも転送（既存のキャリブレーションファイルがあれば）
 ssh ${RASPI_USER}@${RASPI_IP} "mkdir -p ~/Data"

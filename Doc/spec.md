@@ -91,8 +91,8 @@ graph LR
 | Zero2W | PWM       | 13      | Eye           |
 | RP2350 | UART0 TXD | GPIO0  | Zero2W RXD     |
 | RP2350 | UART0 RXD | GPIO1  | Zero2W TXD     | 
-| RP2350 | I2C0 SDA  | GPIO19 | MPU-6886 (IMU) |
-| RP2350 | I2C0 SCL  | GPIO18 | MPU-6886 (IMU) |
+| RP2350 | I2C0 SDA  | GPIO27 | MPU-6886 (IMU) |
+| RP2350 | I2C0 SCL  | GPIO26 | MPU-6886 (IMU) |
 | RP2350 | PWM_6A    | GPIO8  | MotorDrv M1A   |
 | RP2350 | PWM_6B    | GPIO9  | MotorDrv M1B   |
 | RP2350 | PWM_4B    | GPIO12 | MotorDrv M2B   |

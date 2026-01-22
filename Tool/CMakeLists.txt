@@ -50,16 +50,16 @@ set(ARMADILLO_LIBS
 
 # VL53L8CXライブラリのソースファイル
 set(VL53L8CX_SOURCES
-    ../RobotHead/src/vl53l8cx.cpp
-    ../RobotHead/src/platform_wrapper.cpp
-    ../RobotHead/src/i2c_dev.cpp
+    ../RobotHead/src/sensors/vl53l8cx.cpp
+    ../RobotHead/src/platform/platform_wrapper.cpp
+    ../RobotHead/src/platform/i2c_dev.cpp
 )
 
 set(API_SRC
-    ../RobotHead/src/vl53l8cx_api.c
-    ../RobotHead/src/vl53l8cx_plugin_motion_indicator.c
-    ../RobotHead/src/vl53l8cx_plugin_detection_thresholds.c
-    ../RobotHead/src/vl53l8cx_plugin_xtalk.c
+    ../RobotHead/src/sensors/vl53l8cx_api.c
+    ../RobotHead/src/sensors/vl53l8cx_plugin_motion_indicator.c
+    ../RobotHead/src/sensors/vl53l8cx_plugin_detection_thresholds.c
+    ../RobotHead/src/sensors/vl53l8cx_plugin_xtalk.c
 )
 
 set_source_files_properties(${API_SRC} PROPERTIES LANGUAGE C)
@@ -73,6 +73,8 @@ target_link_libraries(camera_calibration_web ${OPENCV_LIBS} ${LAPACK_LIBS} ${ARM
 add_executable(depth_calibration_web depth_calibration_web.cpp ${VL53L8CX_SOURCES} ${API_SRC})
 target_include_directories(depth_calibration_web PRIVATE 
     ${CMAKE_SOURCE_DIR}/../RobotHead/include
+    ${CMAKE_SOURCE_DIR}/../RobotHead/include/sensors
+    ${CMAKE_SOURCE_DIR}/../RobotHead/include/platform
     ${CMAKE_SOURCE_DIR}/../include
     ${CMAKE_SOURCE_DIR}/../includes
 )
@@ -81,3 +83,6 @@ target_link_libraries(depth_calibration_web ${OPENCV_LIBS} ${LAPACK_LIBS} ${ARMA
 # Depthキャリブレーションツール(旧版)
 add_executable(calibrate_depth calibrate_depth.cpp)
 target_link_libraries(calibrate_depth ${OPENCV_LIBS} ${LAPACK_LIBS} ${ARMADILLO_LIBS})
+# UARTボディテストツール
+add_executable(uart_body_test uart_body_test.cpp)
+target_link_libraries(uart_body_test pthread)
