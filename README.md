@@ -1,82 +1,110 @@
+
 # RobotC
-my robot project
+
+能動的に動くペットロボット
+人を探してついてくる・障害物回避・会話・感情表現
 
 ```mermaid
 graph TD
-    PC["PC (Robot Control / TTS)"]
-
-    subgraph Robot
-        Zero2W["Raspberry Pi Zero 2W<br>(Camera / Depth / Audio)"]
-        Pico["Raspberry Pi Pico<br>(IMU / Motor Control)"]
-
-        Camera["Camera"] --- Zero2W
-        Depth["Depth Sensor"] --- Zero2W
-        Mic["Microphone"] --- Zero2W
-        Speaker["Speaker"] --- Zero2W
-
-        IMU["IMU"] --- Pico
-        Motor["Motor Driver"] --- Pico
-    end
-
-    PC <-- "MQTT" --> Zero2W
-    Zero2W <-- "UART" --> Pico
-
-    style PC fill:#f9f,stroke:#333
-    style Zero2W fill:#bbf,stroke:#333
-    style Pico fill:#dfd,stroke:#333
+        PC["PC (Robot Control / TTS)"]
+        subgraph Robot
+                Zero2W["Raspberry Pi Zero 2W<br>(Camera / Depth / Audio)"]
+                Pico["Raspberry Pi Pico 2<br>(IMU / Motor Control)"]
+                Camera["Camera"] --- Zero2W
+                Depth["Depth Sensor"] --- Zero2W
+                Mic["Microphone"] --- Zero2W
+                Speaker["Speaker"] --- Zero2W
+                IMU["IMU"] --- Pico
+                Motor["Motor Driver"] --- Pico
+        end
+        PC <-- "MQTT (WiFi)" --> Zero2W
+        Zero2W <-- "UART" --> Pico
+        style PC fill:#f9f,stroke:#333
+        style Zero2W fill:#bbf,stroke:#333
+        style Pico fill:#dfd,stroke:#333
 ```
 
-## Features
+---
 
-- **Camera & Depth Sensing**: OV5647 Camera + VL53L8CX ToF Sensor (8x8 depth matrix)
-- **Object Detection**: YOLOv4-tiny with OpenCV DNN
-- **Web Streaming**: Real-time video streaming with depth overlay (HTTP MJPEG)
-- **Cross-compilation**: Build on PC, deploy to Raspberry Pi Zero 2W
+## 目的
 
-## Hardware
+- 近くの人を探してついてくる
+- 障害物を避ける
+- 人と会話し、感情表現する
 
-- Raspberry Pi Zero 2W (512MB RAM)
-- OV5647 Camera Module
-- VL53L8CX ToF Sensor (I2C)
-- Raspberry Pi Pico (for motor control)
+## 主な機能
 
-## Setup
+- 人検出・追従（カメラ/距離センサ/マイク）
+- 障害物回避（簡易SLAM/マッピング）
+- 6足歩行（IMU＋2モーター制御）
+- 会話（マイク/スピーカー）
+- 感情表現（LED）
 
-### 1. Raspberry Pi Setup
+## シナリオ例
 
-On Raspberry Pi, install required packages:
+1. 回転制御で人を探索
+2. 人を見つけたら距離測定
+3. 距離に応じて接近・停止・後退
+4. 障害物があれば回避
+5. 一定距離以内で会話・感情表現
+6. 人がいなければ徘徊
+
+## システム構成
+
+- **PC**  
+    - 重い処理（音声認識/合成・地図生成など）
+    - Zero2WとMQTT通信
+
+- **Raspberry Pi Zero 2W**  
+    - カメラ・距離センサ・マイク・スピーカー
+    - Pico 2とUART通信
+
+- **Raspberry Pi Pico 2**  
+    - IMU・モータードライバ
+
+---
+
+## セットアップ
+
+### 1. Raspberry Pi Zero 2W
 
 ```bash
 sudo apt update
-sudo apt install -y \
-    libopencv-dev \
-    libarmadillo-dev \
-    liblapack-dev \
-    libblas-dev \
-    libi2c-dev
+sudo apt install -y libopencv-dev libarmadillo-dev liblapack-dev libblas-dev libi2c-dev python3-serial python3-flask python3-numpy
 ```
 
-### 2. PC Cross-Compilation Setup
+### 2. PCクロスコンパイル環境
 
-Clone dependencies from Raspberry Pi:
+# ...（既存手順を省略せず記載）
 
-```bash
-# On Raspberry Pi
-cd /usr/lib/aarch64-linux-gnu
-tar czf ~/raspi_libs.tar.gz *.so* lapack/ blas/
+### 3. デプロイ・キャリブレーション
 
-# On PC
-scp pi@raspberrypi:~/raspi_libs.tar.gz .
-mkdir -p libs/aarch64
-cd libs/aarch64
-tar xzf ../../raspi_libs.tar.gz
+- `scripts/deploy_head.sh` / `deploy_body.sh` で自動デプロイ
+- IMUキャリブレーションWebツールあり
+
+---
+
+## ディレクトリ構成
+
+```
+RobotC/
+├── RobotHead/           # Camera + Depth + Object Detection
+│   ├── src/
+│   │   ├── sensors/     # VL53L8CX ToF sensor
+│   │   ├── detection/   # Object detection (YOLO)
+│   │   └── platform/    # I2C, hardware abstraction
+│   └── include/
+├── RobotBody/           # IMU + Motor control (Pico 2)
+├── Tool/                # Calibration tools
+├── Data/
+│   └── models/          # YOLO models (not in git)
+├── scripts/             # Build & deployment scripts
+└── libs/                # Cross-compile libraries (not in git)
 ```
 
-Install cross-compiler on PC:
+## ライセンス
 
-```bash
-sudo apt install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
-```
+MIT
 
 ### 3. Download Object Detection Model
 

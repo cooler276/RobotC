@@ -1,3 +1,18 @@
+/**
+ * @file main.cpp
+ * @brief Main program for RobotHead - Camera-based object detection with voice interaction
+ * @author RobotC Project
+ * @date 2026-01-23
+ * 
+ * Features:
+ * - libcamera-based camera capture
+ * - YOLOv8 object detection
+ * - VL53L8CX ToF distance sensing
+ * - Audio playback (startup sound, greetings)
+ * - Voice detection (optional)
+ * - HTTP MJPEG streaming (--stream mode)
+ */
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgcodecs.hpp> // For imwrite
 #include <opencv2/imgproc.hpp>  // For rotate
@@ -12,6 +27,9 @@
 #include "platform/i2c_dev.h"
 #include "platform/platform_wrapper.h"
 #include "sensors/vl53l8cx_api.h"
+#include "camera/libcamera_capture.h"
+#include "audio/audio_player.h"
+#include "audio/voice_detector.h"
 
 #ifdef ENABLE_OBJECT_DETECTION
 #include "detection/object_detector.h"
@@ -25,6 +43,10 @@ Mat g_current_frame;
 bool g_stream_mode = false;
 bool g_frame_ready = false;
 std::mutex g_frame_mutex;
+
+// 挨拶音声管理用
+bool g_greeting_played = false;
+uint16_t g_min_distance = 4000;  // 最小距離（mm）
 
 // HTTPレスポンスを送信する関数（MJPEGストリーミング、約5fps）
 void send_http_response(int client_sock) {
@@ -143,6 +165,36 @@ int main(int argc, char** argv) {
         cout << "ストリーミングモードで起動します" << endl;
     }
 
+    // 起動音を再生
+    AudioPlayer audio_player;
+    audio_player.init();
+    audio_player.playFile("/home/ryo/work/voice/kidou.wav");
+    cout << "起動音を再生しました" << endl;
+    
+    // 起動音再生を待つ（2秒）
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+    // 音声検出器の初期化（起動音再生後）
+    VoiceDetector voice_detector;
+    bool voice_enabled = false;
+    cout << "音声検出器を初期化中..." << endl;
+    // 標準エラー出力を一時的に抑制
+    int stderr_backup = dup(STDERR_FILENO);
+    freopen("/dev/null", "w", stderr);
+    
+    voice_enabled = voice_detector.init();
+    
+    // 標準エラー出力を復元
+    fflush(stderr);
+    dup2(stderr_backup, STDERR_FILENO);
+    close(stderr_backup);
+    
+    if (voice_enabled) {
+        cout << "音声検出器を初期化しました" << endl;
+    } else {
+        cout << "音声検出器の初期化に失敗しました（音声検知は無効）" << endl;
+    }
+
     // カメラキャリブレーションデータの読み込み
     Mat camera_matrix, dist_coeffs;
     bool use_camera_calib = false;
@@ -194,16 +246,12 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    // カメラの初期化
-    VideoCapture cap("/dev/video0", cv::CAP_V4L2);
+    // カメラの初期化（libcamera使用）
+    LibCameraCapture cap(320, 240);
     if (!cap.isOpened()) {
         cerr << "カメラが見つかりません。" << endl;
         return -1;
     }
-
-    // Set camera resolution（メモリ節約のため低解像度に設定）
-    cap.set(CAP_PROP_FRAME_WIDTH, 320);  // Width
-    cap.set(CAP_PROP_FRAME_HEIGHT, 240); // Height
 
     // VL53L8CXセンサーの初期化
     const string i2c_device = "/dev/i2c-1";
@@ -260,8 +308,7 @@ int main(int argc, char** argv) {
         last_frame_time = chrono::steady_clock::now();
 
         Mat frame;
-        cap >> frame;
-        if (frame.empty()) {
+        if (!cap.read(frame) || frame.empty()) {
             cerr << "カメラ画像の取得に失敗しました。" << endl;
             break;
         }
@@ -283,7 +330,15 @@ int main(int argc, char** argv) {
             if (vl53l8cx_get_ranging_data(&dev, &results) == VL53L8CX_STATUS_OK) {
                 has_depth = true;
 
-                // Depthデータを取得（8x8マトリクス）
+                // 最小距離を計算（人検出時の距離判定用）
+                g_min_distance = 4000;
+                for (int i = 0; i < 64; i++) {
+                    if (results.target_status[i] == 5 || results.target_status[i] == 9) {
+                        if (results.distance_mm[i] < g_min_distance) {
+                            g_min_distance = results.distance_mm[i];
+                        }
+                    }
+                }
             }
         }
 
@@ -300,6 +355,26 @@ int main(int argc, char** argv) {
             try {
                 vector<DetectedObject> detections = detector->detect(display);
                 detector->drawDetections(display, detections);
+                
+                // 人を検出したら距離判定して挨拶音声を再生
+                bool person_detected = false;
+                for (const auto& det : detections) {
+                    if (det.class_name == "person") {
+                        person_detected = true;
+                        break;
+                    }
+                }
+                
+                if (person_detected && g_min_distance < 400 && !g_greeting_played && !audio_player.isPlaying()) {
+                    cout << "人を検出しました（距離: " << g_min_distance << "mm） - 挨拶音声を再生します" << endl;
+                    audio_player.playRandomGreeting();
+                    g_greeting_played = true;
+                }
+                
+                // 人がいなくなったらフラグをリセット（次回検出時に再生できるように）
+                if (!person_detected) {
+                    g_greeting_played = false;
+                }
             } catch (const exception& e) {
                 cerr << "物体検出エラー: " << e.what() << endl;
             }
@@ -389,6 +464,12 @@ int main(int argc, char** argv) {
             if (waitKey(1) == 'q') {
                 break;
             }
+        }
+        
+        // 音声検知と相槌再生
+        if (voice_enabled && voice_detector.detectVoice() && !audio_player.isPlaying()) {
+            cout << "音声を検知しました - 相槌を再生します" << endl;
+            audio_player.playRandomResponse();
         }
     }
 

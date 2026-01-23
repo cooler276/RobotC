@@ -56,19 +56,30 @@ fi
 
 # 実行ファイルの転送
 echo "実行ファイルを転送中..."
-scp ${BUILD_DIR}/${BINARY_NAME} ${RASPI_USER}@${RASPI_IP}:${REMOTE_DIR}/
+rsync -avz --progress ${BUILD_DIR}/${BINARY_NAME} ${RASPI_USER}@${RASPI_IP}:${REMOTE_DIR}/
 
 if [ $? -ne 0 ]; then
     echo "エラー: ファイルの転送に失敗しました"
     exit 1
 fi
 
-# Dataディレクトリの転送
-echo "Dataディレクトリを転送中..."
-scp -r ../Data ${RASPI_USER}@${RASPI_IP}:${REMOTE_DIR}/
+# Dataディレクトリの転送（rsyncで差分のみ転送）
+echo "Dataディレクトリを同期中（差分のみ転送）..."
+rsync -avz --progress --checksum ../Data/ ${RASPI_USER}@${RASPI_IP}:${REMOTE_DIR}/Data/
 
 if [ $? -ne 0 ]; then
-    echo "警告: Dataディレクトリの転送に失敗しました"
+    echo "警告: Dataディレクトリの同期に失敗しました"
+fi
+
+# YOLOv8 ONNXモデルとラベルファイルの転送
+echo "YOLOv8モデルとラベルファイルを転送中..."
+if [ -f "${SCRIPT_DIR}/yolov8n_320.onnx" ]; then
+    rsync -avz --progress ${SCRIPT_DIR}/yolov8n_320.onnx ${RASPI_USER}@${RASPI_IP}:${REMOTE_DIR}/Data/
+    echo "✓ YOLOv8モデル（320x320）を転送しました"
+fi
+if [ -f "${SCRIPT_DIR}/coco.names" ]; then
+    rsync -avz --progress ${SCRIPT_DIR}/coco.names ${RASPI_USER}@${RASPI_IP}:${REMOTE_DIR}/Data/
+    echo "✓ COCOラベルファイルを転送しました"
 fi
 
 # 実行権限の付与

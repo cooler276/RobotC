@@ -1,7 +1,11 @@
 #include "motor_driver.h"
 #include <cstdlib>
 
-MotorDriver::MotorDriver() : slice_m1(0), slice_m2(0) {}
+MotorDriver::MotorDriver() 
+    : slice_m1(0), slice_m2(0),
+      current_rotation_speed(0), current_drive_speed(0),
+      target_rotation_speed(0), target_drive_speed(0),
+      last_update_time(0), boost_start_time(0), boost_active(false) {}
 
 bool MotorDriver::init() {
     // GPIO8, GPIO9 (Motor1 - 回転) の設定
@@ -39,8 +43,48 @@ void MotorDriver::setSpeed(Motor motor, int8_t speed) {
     if (speed < -100) speed = -100;
     if (speed > 100) speed = 100;
     
+    // 回転と前後移動の同時動作防止（バッテリー負荷対策）
+    if (motor == MOTOR_ROTATION) {
+        target_rotation_speed = speed;
+        if (speed != 0 && current_drive_speed != 0) {
+            // 駆動中の場合は駆動を停止
+            target_drive_speed = 0;
+            current_drive_speed = 0;
+            applyPWM(MOTOR_DRIVE, 0);
+        }
+    } else {
+        target_drive_speed = speed;
+        if (speed != 0 && current_rotation_speed != 0) {
+            // 回転中の場合は回転を停止
+            target_rotation_speed = 0;
+            current_rotation_speed = 0;
+            applyPWM(MOTOR_ROTATION, 0);
+        }
+        
+        // 前進後退時：停止状態からの起動時はブースト有効化
+        if (current_drive_speed == 0 && speed != 0) {
+            boost_active = true;
+            boost_start_time = to_ms_since_boot(get_absolute_time());
+        }
+    }
+}
+
+void MotorDriver::stop() {
+    target_rotation_speed = 0;
+    target_drive_speed = 0;
+    current_rotation_speed = 0;
+    current_drive_speed = 0;
+    boost_active = false;
+    
+    pwm_set_gpio_level(MOTOR1_PIN_A, 0);
+    pwm_set_gpio_level(MOTOR1_PIN_B, 0);
+    pwm_set_gpio_level(MOTOR2_PIN_A, 0);
+    pwm_set_gpio_level(MOTOR2_PIN_B, 0);
+}
+
+// PWM出力（デッドバンド補正込み）
+void MotorDriver::applyPWM(Motor motor, int8_t speed) {
     // デッドバンド補正（モーターの最小起動トルク対応）
-    // 回転モーターと駆動モーターで負荷が異なるため別々に設定
     const int8_t MIN_SPEED_ROTATION = 20;  // 回転モーター用
     const int8_t MIN_SPEED_DRIVE = 65;     // 駆動モーター用（高負荷）
     
@@ -48,7 +92,6 @@ void MotorDriver::setSpeed(Motor motor, int8_t speed) {
     uint16_t pwm_value;
     
     if (abs(speed) > 0 && abs(speed) < min_speed) {
-        // MIN_SPEED未満の場合はMIN_SPEEDにマッピング
         pwm_value = (min_speed * PWM_MAX) / 100;
     } else if (speed == 0) {
         pwm_value = 0;
@@ -57,7 +100,6 @@ void MotorDriver::setSpeed(Motor motor, int8_t speed) {
     }
     
     if (motor == MOTOR_ROTATION) {
-        // Motor1 (回転)
         if (speed >= 0) {
             pwm_set_gpio_level(MOTOR1_PIN_A, pwm_value);
             pwm_set_gpio_level(MOTOR1_PIN_B, 0);
@@ -66,7 +108,6 @@ void MotorDriver::setSpeed(Motor motor, int8_t speed) {
             pwm_set_gpio_level(MOTOR1_PIN_B, pwm_value);
         }
     } else {
-        // Motor2 (前進/後退)
         if (speed >= 0) {
             pwm_set_gpio_level(MOTOR2_PIN_A, pwm_value);
             pwm_set_gpio_level(MOTOR2_PIN_B, 0);
@@ -77,9 +118,50 @@ void MotorDriver::setSpeed(Motor motor, int8_t speed) {
     }
 }
 
-void MotorDriver::stop() {
-    pwm_set_gpio_level(MOTOR1_PIN_A, 0);
-    pwm_set_gpio_level(MOTOR1_PIN_B, 0);
-    pwm_set_gpio_level(MOTOR2_PIN_A, 0);
-    pwm_set_gpio_level(MOTOR2_PIN_B, 0);
+// 定期更新（ランプ・ブースト制御）
+void MotorDriver::update() {
+    uint64_t now = to_ms_since_boot(get_absolute_time());
+    
+    // 初回呼び出し時の初期化
+    if (last_update_time == 0) {
+        last_update_time = now;
+        return;
+    }
+    
+    // 更新間隔チェック
+    if (now - last_update_time < RAMP_STEP_MS) {
+        return;
+    }
+    last_update_time = now;
+    
+    // 回転モーター：ランプ制御（徐々に加速）
+    if (current_rotation_speed != target_rotation_speed) {
+        if (abs(current_rotation_speed - target_rotation_speed) <= RAMP_SPEED_STEP) {
+            current_rotation_speed = target_rotation_speed;
+        } else if (current_rotation_speed < target_rotation_speed) {
+            current_rotation_speed += RAMP_SPEED_STEP;
+        } else {
+            current_rotation_speed -= RAMP_SPEED_STEP;
+        }
+        applyPWM(MOTOR_ROTATION, current_rotation_speed);
+    }
+    
+    // 駆動モーター：ブースト制御（100%→目標速度）
+    if (boost_active) {
+        uint64_t boost_elapsed = now - boost_start_time;
+        if (boost_elapsed >= BOOST_DURATION_MS) {
+            // ブースト終了：目標速度へ
+            boost_active = false;
+            current_drive_speed = target_drive_speed;
+            applyPWM(MOTOR_DRIVE, current_drive_speed);
+        } else {
+            // ブースト中：100%で駆動
+            current_drive_speed = (target_drive_speed >= 0) ? BOOST_SPEED : -BOOST_SPEED;
+            applyPWM(MOTOR_DRIVE, current_drive_speed);
+        }
+    } else if (current_drive_speed != target_drive_speed) {
+        // 通常時：即座に目標速度へ
+        current_drive_speed = target_drive_speed;
+        applyPWM(MOTOR_DRIVE, current_drive_speed);
+    }
 }

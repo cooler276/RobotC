@@ -43,7 +43,6 @@ graph LR
       ToF[VL53L8CX ToF]
       Zero <--> |CSI| Camera
       Zero <--> |I2S| ReSpeaker
-      Zero <--> |SPI| RGB_LEDx3
       Zero <--> |GPIO| Button
       Zero <--> |I2C| ToF
     end

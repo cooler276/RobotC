@@ -32,9 +32,14 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/include/sensors
     ${CMAKE_SOURCE_DIR}/include/detection
     ${CMAKE_SOURCE_DIR}/include/platform
+    ${CMAKE_SOURCE_DIR}/include/camera
+    ${CMAKE_SOURCE_DIR}/include/network
+    ${CMAKE_SOURCE_DIR}/include/audio
+    ${CMAKE_SOURCE_DIR}/include/hardware
     ${CMAKE_SOURCE_DIR}/../include
     ${CMAKE_SOURCE_DIR}/../includes
     ${CMAKE_SOURCE_DIR}/../opencv_4.10_headers
+    ${CMAKE_SOURCE_DIR}/../libs/aarch64/aarch64-linux-gnu/usr/include/libcamera
 )
 
 # ライブラリのパスを指定
@@ -70,6 +75,11 @@ set(ROBOT_HEAD_SOURCES
   src/platform/i2c_dev.cpp
   src/sensors/vl53l8cx.cpp
   src/platform/platform_wrapper.cpp
+  src/hardware/uart_pico.cpp
+  src/audio/audio_player.cpp
+  src/audio/voice_detector.cpp
+  src/hardware/led_controller.cpp
+  src/camera/libcamera_capture.cpp
   ${API_SRC}
 )
 
@@ -107,8 +117,19 @@ set(ARMADILLO_LIBS
     /home/ryo/work/RobotC/libs/aarch64/libarmadillo.so.14
 )
 
+# Add path for ALSA library
+set(ALSA_LIBS
+    /home/ryo/work/RobotC/libs/aarch64/libasound.so.2
+)
+
+# Add path for libcamera libraries
+set(LIBCAMERA_LIBS
+    /home/ryo/work/RobotC/libs/aarch64/libcamera.so
+    /home/ryo/work/RobotC/libs/aarch64/libcamera-base.so
+)
+
 # VL53L8CXライブラリとスレッドライブラリをリンク
-target_link_libraries(robot_head pthread ${OPENCV_LIBS} ${LAPACK_LIBS} ${ARMADILLO_LIBS} vl53l8cx_lib)
+target_link_libraries(robot_head pthread ${ALSA_LIBS} ${OPENCV_LIBS} ${LAPACK_LIBS} ${ARMADILLO_LIBS} ${LIBCAMERA_LIBS} vl53l8cx_lib)
 
 # Add dependency to ensure proper linking order
 add_dependencies(robot_head vl53l8cx_lib)

@@ -29,8 +29,12 @@ private:
     Net net_;
     vector<string> class_names_;
     float confidence_threshold_;
+    bool is_yolov8_;           // YOLOv8モデルかどうか
+    int input_size_;           // 入力画像サイズ（320, 416, 640など）
     
     void loadLabels(const string& labels_path);
+    vector<DetectedObject> parseYOLOv3v4Output(const vector<Mat>& outputs, int frame_width, int frame_height);
+    vector<DetectedObject> parseYOLOv8Output(const vector<Mat>& outputs, int frame_width, int frame_height);
 };
 
 #endif // OBJECT_DETECTOR_H
